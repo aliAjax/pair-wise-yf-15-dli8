@@ -1,126 +1,105 @@
+import { useState } from "react";
 import "./styles.css";
+import { useTracker } from "./store/useTracker";
+import { IntakePage } from "./pages/IntakePage";
+import { ReviewPage } from "./pages/ReviewPage";
+import { QueuePage } from "./pages/QueuePage";
+import { CasesPage } from "./pages/CasesPage";
+import { SampleDetail } from "./components/SampleDetail";
 
-const project = {
-  "sourceNo": 5,
-  "id": "hxyfront-62003",
-  "port": 62003,
-  "title": "法医昆虫学样本记录",
-  "domain": "法医昆虫学",
-  "prompt": "做一个法医昆虫学样本记录前端工具，用来记录采样地点、环境温度、尸体暴露阶段、昆虫种类、发育阶段、采样时间、保存方式和鉴定备注。页面需要有样本批次列表、发育阶段筛选、温度记录图、案件样本关联页和单个样本详情卡片。",
-  "palette": [
-    "#365314",
-    "#a16207",
-    "#dc2626"
-  ],
-  "metrics": [
-    "样本批次",
-    "平均温度",
-    "发育阶段",
-    "待鉴定"
-  ],
-  "filters": [
-    "卵",
-    "幼虫",
-    "蛹",
-    "成虫"
-  ],
-  "fields": [
-    "采样地点",
-    "环境温度",
-    "暴露阶段",
-    "昆虫种类",
-    "发育阶段",
-    "保存方式"
-  ],
-  "records": [
-    [
-      "CASE-042-A",
-      "室外草地",
-      "幼虫三龄，28.6℃",
-      "乙醇保存"
-    ],
-    [
-      "CASE-042-B",
-      "阴影区域",
-      "蛹期样本",
-      "需复核种属"
-    ],
-    [
-      "CASE-051-A",
-      "水沟边缘",
-      "成虫采集",
-      "已完成拍照"
-    ]
-  ]
-};
+type Tab = "intake" | "review" | "queue" | "cases";
+
+const TABS: Array<{ key: Tab; label: string }> = [
+  { key: "intake", label: "入库登记" },
+  { key: "review", label: "待核对" },
+  { key: "queue", label: "鉴定队列" },
+  { key: "cases", label: "案件关联" },
+];
 
 function App() {
+  const { state, intake, release, seal, reexam, reset } = useTracker();
+  const [tab, setTab] = useState<Tab>("intake");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const selected = state.samples.find((s) => s.id === selectedId) ?? null;
+  const pendingCount = state.samples.filter((s) => s.status === "pending").length;
+  const queueCount = state.samples.filter((s) => s.status === "active").length;
+  const sealedCount = state.samples.filter((s) => s.status === "sealed").length;
+
+  const openDetail = (id: string) => setSelectedId(id);
+
   return (
     <main className="app">
       <section className="hero">
-        <p>{project.id} · 源提示词{project.sourceNo} · Port {project.port}</p>
-        <h1>{project.title}</h1>
-        <span>{project.prompt}</span>
+        <p>法医昆虫样本追踪台 · 数据仅保存在本浏览器</p>
+        <h1>法医昆虫样本追踪台</h1>
+        <span>
+          入库判定条码与网格冲突，冲突样本保留待核对；核对人员补写现场照片编号后归回案件；
+          封存后复检仅建立副本，原记录与温度曲线保持不动。
+        </span>
       </section>
 
       <section className="metrics">
-        {project.metrics.map((metric: string, index: number) => (
-          <article key={metric}>
-            <small>{metric}</small>
-            <strong>{[86, 14, 7, 32][index] ?? 12}</strong>
-          </article>
+        <article>
+          <small>案件</small>
+          <strong>{state.cases.length}</strong>
+        </article>
+        <article>
+          <small>待核对</small>
+          <strong>{pendingCount}</strong>
+        </article>
+        <article>
+          <small>鉴定队列</small>
+          <strong>{queueCount}</strong>
+        </article>
+        <article>
+          <small>已封存</small>
+          <strong>{sealedCount}</strong>
+        </article>
+      </section>
+
+      <nav className="tabs">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={tab === t.key ? "tab active" : "tab"}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+            {t.key === "review" && pendingCount > 0 && (
+              <span className="tab-count">{pendingCount}</span>
+            )}
+          </button>
         ))}
-      </section>
+        <button className="tab reset" onClick={reset} title="清空浏览器数据并恢复预置样例">
+          重置演示数据
+        </button>
+      </nav>
 
-      <section className="workspace">
-        <aside className="panel">
-          <h2>{project.domain}筛选</h2>
-          <div className="chips">
-            {project.filters.map((item: string) => (
-              <button key={item}>{item}</button>
-            ))}
-          </div>
-        </aside>
+      {tab === "intake" && <IntakePage cases={state.cases} onIntake={intake} />}
+      {tab === "review" && (
+        <ReviewPage cases={state.cases} samples={state.samples} onRelease={release} />
+      )}
+      {tab === "queue" && (
+        <QueuePage cases={state.cases} samples={state.samples} onSelect={openDetail} />
+      )}
+      {tab === "cases" && (
+        <CasesPage cases={state.cases} samples={state.samples} onSelect={openDetail} />
+      )}
 
-        <section className="panel form-panel">
-          <div className="heading">
-            <div>
-              <p>专业字段</p>
-              <h2>新增记录</h2>
-            </div>
-            <button className="primary">保存草稿</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="panel">
-        <div className="heading">
-          <div>
-            <p>历史记录</p>
-            <h2>近期工作台</h2>
-          </div>
-          <button>导出摘要</button>
-        </div>
-        <div className="records">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      {selected && (
+        <SampleDetail
+          sample={selected}
+          cases={state.cases}
+          samples={state.samples}
+          onSeal={(id) => seal(id, "鉴定员")}
+          onReexam={(id) => {
+            const copy = reexam(id, "鉴定员");
+            if (copy) setSelectedId(copy.id);
+          }}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
     </main>
   );
 }
